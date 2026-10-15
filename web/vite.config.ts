@@ -11,7 +11,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
+        // txt covers the shipped word lists, so the game still works offline.
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json,txt}"],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
           {
