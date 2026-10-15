@@ -19,18 +19,21 @@ export function HoneycombBoard({ cells, onCellClick }: HoneycombBoardProps) {
       {cells.map((cell) => (
         <g
           key={cell.letter}
+          className="hex"
           role="button"
+          tabIndex={0}
           aria-label={`Letter ${cell.letter}`}
-          style={{ cursor: "pointer" }}
           onClick={() => onCellClick(cell.letter)}
+          onKeyDown={(e) => {
+            // Space enters the letter. Enter is left to the window handler, which submits.
+            if (e.key !== " ") return;
+            e.preventDefault();
+            onCellClick(cell.letter);
+          }}
         >
           <polygon
             points={hexPoints(cell, cell.r * INSET)}
-            style={{
-              fill: cell.isCentre ? "#facc15" : "var(--paper)",
-              stroke: "var(--line-strong)",
-              strokeWidth: 2,
-            }}
+            style={{ fill: cell.isCentre ? "#facc15" : "var(--paper)" }}
           />
           <text
             x={cell.cx}

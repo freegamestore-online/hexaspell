@@ -9,6 +9,11 @@ export function isDateKey(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+/** The UTC date one day before `date`, such as "2026-10-15" for "2026-10-16". */
+export function previousDate(date: string): string {
+  return utcDate(Date.parse(`${date}T00:00:00Z`) - 86_400_000);
+}
+
 /** Today's puzzle for a UTC date. The same date always gives the same letters. */
 export function dailyPuzzle(date: string, answers: ReadonlySet<string>): PuzzleConfig {
   return generatePuzzle(`daily:${date}`, answers);

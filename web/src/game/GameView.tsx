@@ -1,9 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLeaderboard } from "@freegamestore/games";
+import {
+  HAPTICS,
+  ParticleLayer,
+  ScorePop,
+  prefersReducedMotion,
+  useHaptics,
+  useShake,
+  type ParticleLayerHandle,
+} from "../feel";
+import { Celebration } from "../feel/Celebration";
 import { COMMON_URL, loadWordlist, VALIDATION_URL } from "../words/wordlist";
 import { buildBoard, BOARD_SIZE } from "./board";
 import { dailyPuzzle, getPracticeLetters, utcDate } from "./daily";
+import { Helpers } from "./HelpersPanel";
 import { HoneycombBoard } from "./HoneycombBoard";
+import { keyAction } from "./keyboard";
 import { submitScore } from "./leaderboard";
 import { getRank } from "./ranks";
 import { loadProgress, saveProgress } from "./saves";
@@ -13,8 +25,22 @@ import { useHexaSpell, type WordLists } from "./useHexaSpell";
 const GAME_ID = "hexaspell";
 /** Until there is a sign-in name to use, scores are filed under this. */
 const PLAYER_NAME = "Player";
+/** Confetti colours for a pangram burst. */
+const PALETTE = ["#facc15", "#2563eb", "#16a34a", "#dc2626", "#9333ea"];
 
 type Mode = "daily" | "practice";
+
+interface Pop {
+  id: number;
+  points: number;
+  x: number;
+  y: number;
+}
+
+interface Burst {
+  id: string;
+  label: string;
+}
 
 /** Loads both word lists, then mounts the game once they are ready. */
 export function GameView() {
@@ -90,8 +116,55 @@ function Play({ lists, mode }: { lists: WordLists; mode: Mode }) {
   const cells = useMemo(() => buildBoard(puzzle, BOARD_SIZE, BOARD_SIZE), [puzzle]);
   const { submitScore: submitToPlatform } = useLeaderboard(GAME_ID);
   const [finished, setFinished] = useState<string | null>(null);
-  const { appendLetter, deleteLetter, submitWord } = game;
+  const { appendLetter, deleteLetter, clearInput, submitWord } = game;
   const rank = getRank(game.score);
+
+  // Feel kit: haptics always; pops, bursts and shakes only when motion is allowed.
+  const haptics = useHaptics();
+  const inputRef = useRef<HTMLDivElement>(null);
+  const shake = useShake(inputRef);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const particles = useRef<ParticleLayerHandle>(null);
+  const [pops, setPops] = useState<Pop[]>([]);
+  const [bursts, setBursts] = useState<Burst[]>([]);
+  const nextId = useRef(0);
+  const seenAccepted = useRef(game.accepted?.id ?? 0);
+  const seenRejections = useRef(game.rejections);
+  const seenRank = useRef(rank);
+
+  const removePop = useCallback((id: number) => setPops((p) => p.filter((x) => x.id !== id)), []);
+  const removeBurst = useCallback((id: string) => setBursts((b) => b.filter((x) => x.id !== id)), []);
+
+  // A word was accepted: pop its points, and celebrate a pangram or a rank-up.
+  useEffect(() => {
+    const accepted = game.accepted;
+    if (!accepted || accepted.id === seenAccepted.current) return;
+    seenAccepted.current = accepted.id;
+    haptics.pulse(HAPTICS.clear);
+    const rankNow = getRank(game.score);
+    const rankedUp = rankNow !== seenRank.current;
+    seenRank.current = rankNow;
+    if (prefersReducedMotion()) return;
+
+    const board = boardRef.current;
+    const x = (board?.clientWidth ?? 0) / 2;
+    const y = (board?.clientHeight ?? 0) / 2;
+    const id = ++nextId.current;
+    setPops((p) => [...p, { id, points: accepted.points, x, y }]);
+
+    const labels = [accepted.pangram ? "Pangram!" : null, rankedUp ? `Rank up: ${rankNow}` : null].filter(Boolean);
+    if (accepted.pangram) {
+      particles.current?.burst(x, y, PALETTE, { count: 70, speed: [220, 520], size: [4, 8], life: 1.3 });
+    }
+    if (labels.length > 0) setBursts((b) => [...b, { id: `burst-${id}`, label: labels.join(" · ") }]);
+  }, [game.accepted, game.score, haptics]);
+
+  // A rejected word shakes the typed letters. Under reduced motion the shake does nothing.
+  useEffect(() => {
+    if (game.rejections === seenRejections.current) return;
+    seenRejections.current = game.rejections;
+    shake();
+  }, [game.rejections, shake]);
 
   // Daily progress is saved as words are found. Practice is never saved.
   useEffect(() => {
@@ -99,22 +172,24 @@ function Play({ lists, mode }: { lists: WordLists; mode: Mode }) {
     saveProgress(date, { score: game.score, rank: getRank(game.score), foundWords: game.found });
   }, [mode, date, game.found, game.score]);
 
+  // Physical keyboard. A focused button or summary keeps its own Enter and Space.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "Enter") {
-        e.preventDefault();
-        submitWord();
-      } else if (e.key === "Backspace") {
-        e.preventDefault();
-        deleteLetter();
-      } else if (/^[a-z]$/i.test(e.key)) {
-        appendLetter(e.key);
-      }
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      const native = target !== null && (target.tagName === "BUTTON" || target.tagName === "SUMMARY");
+      if (native && (e.key === "Enter" || e.key === " ")) return;
+
+      const action = keyAction(e.key, e);
+      if (!action) return;
+      e.preventDefault();
+      if (action.type === "append") appendLetter(action.letter);
+      else if (action.type === "delete") deleteLetter();
+      else if (action.type === "clear") clearInput();
+      else submitWord();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [appendLetter, deleteLetter, submitWord]);
+  }, [appendLetter, deleteLetter, clearInput, submitWord]);
 
   // Finishing sends the day's result to the local leaderboard and the platform one.
   // A malformed or failed submit is dropped quietly.
@@ -144,6 +219,7 @@ function Play({ lists, mode }: { lists: WordLists; mode: Mode }) {
       </p>
 
       <div
+        ref={inputRef}
         className="min-h-10 text-2xl font-bold tracking-widest"
         aria-label="Typed letters"
         style={{ color: game.input ? "var(--ink)" : "var(--muted)" }}
@@ -151,7 +227,16 @@ function Play({ lists, mode }: { lists: WordLists; mode: Mode }) {
         {game.input || "Type or tap letters"}
       </div>
 
-      <HoneycombBoard cells={cells} onCellClick={appendLetter} />
+      <div ref={boardRef} className="relative" style={{ width: "min(300px, 80vw)" }}>
+        <HoneycombBoard cells={cells} onCellClick={appendLetter} />
+        <ParticleLayer ref={particles} />
+        {pops.map((p) => (
+          <ScorePop key={p.id} points={p.points} x={p.x} y={p.y} onDone={() => removePop(p.id)} />
+        ))}
+      </div>
+      {bursts.map((b) => (
+        <Celebration key={b.id} id={b.id} label={b.label} onDone={removeBurst} />
+      ))}
 
       <div className="flex gap-3">
         <button
@@ -198,6 +283,8 @@ function Play({ lists, mode }: { lists: WordLists; mode: Mode }) {
           )}
         </div>
       )}
+
+      <Helpers puzzle={game.puzzle} lists={lists} date={date} />
 
       {game.found.length > 0 && (
         <ul className="flex flex-wrap justify-center gap-2 max-h-24 overflow-y-auto text-sm">

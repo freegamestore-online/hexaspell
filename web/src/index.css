@@ -34,8 +34,9 @@
   font-family: "Manrope", system-ui, sans-serif;
 }
 
+/* Dark follows the system unless the theme toggle has set data-theme (see the block below). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --paper: #0f0f0f;
     --ink: #f5f5f5;
     --muted: #9ca3af;
@@ -56,6 +57,28 @@
     --surface: #1a1a1a;
     --border: #2d2d2d;
   }
+}
+
+/* The theme toggle (SDK GameThemeToggle) sets data-theme="dark". Keep in step with the media block above. */
+:root[data-theme="dark"] {
+  --paper: #0f0f0f;
+  --ink: #f5f5f5;
+  --muted: #9ca3af;
+  --line: #2d2d2d;
+  --line-strong: #404040;
+  --panel: #1a1a1a;
+  --glass: rgba(15, 15, 15, 0.8);
+  --dock: #1a1a1a;
+
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --error: #ef4444;
+
+  --accent-soft: #1a2e26;
+
+  --bg: #0f0f0f;
+  --surface: #1a1a1a;
+  --border: #2d2d2d;
 }
 
 /* Games are fullscreen — no document scroll, no text selection */
@@ -79,4 +102,106 @@ body {
 #root {
   height: 100%;
   overflow: hidden;
+}
+
+/* Honeycomb: the hex outline, a tap press, and a visible keyboard focus ring. */
+.hex {
+  cursor: pointer;
+  outline: none;
+}
+
+.hex polygon {
+  stroke: var(--line-strong);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 80ms ease-out;
+}
+
+.hex:active polygon {
+  transform: scale(0.94);
+}
+
+.hex:focus-visible polygon {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+/* Feel kit overlays, drawn over the game. Pops and celebrations are not rendered under reduced motion. */
+.score-pop {
+  position: absolute;
+  z-index: 650;
+  pointer-events: none;
+  font-weight: 800;
+  font-size: 1.5rem;
+  color: var(--accent);
+  white-space: nowrap;
+  animation: none;
+}
+
+.celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  pointer-events: none;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: both;
+}
+
+.confetti-piece:nth-child(3n) {
+  background: #facc15;
+}
+
+.confetti-piece:nth-child(3n + 1) {
+  background: #16a34a;
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate(var(--dx), 110vh) rotate(var(--rot));
+  }
+}
+
+.celebrate-banner {
+  margin: 0;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius);
+  background: var(--paper);
+  border: 2px solid var(--accent);
+  color: var(--ink);
+  font-family: "Fraunces", serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+/* Reduced motion: no tap press, no shake, and no animation or transition lengths left to run. */
+@media (prefers-reduced-motion: reduce) {
+  .hex:active polygon {
+    transform: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

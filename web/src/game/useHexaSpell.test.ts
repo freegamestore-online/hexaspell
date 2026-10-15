@@ -82,6 +82,35 @@ describe("useHexaSpell", () => {
     expect(result.current.score).toBe(0);
   });
 
+  it("clearInput empties the typed letters without touching the found words", () => {
+    const { result } = setup();
+    type(result, "rest");
+    act(() => result.current.submitWord());
+    type(result, "ra");
+    act(() => result.current.clearInput());
+    expect(result.current.input).toBe("");
+    expect(result.current.found).toEqual(["REST"]);
+  });
+
+  it("records each accepted word, with a fresh id, so repeats can be told apart", () => {
+    const { result } = setup();
+    expect(result.current.accepted).toBeNull();
+    type(result, "rest");
+    act(() => result.current.submitWord());
+    expect(result.current.accepted).toEqual({ id: 1, points: 1, pangram: false });
+    type(result, "nastier");
+    act(() => result.current.submitWord());
+    expect(result.current.accepted).toEqual({ id: 2, points: 14, pangram: true });
+  });
+
+  it("does not record a rejected word as accepted", () => {
+    const { result } = setup();
+    type(result, "res");
+    act(() => result.current.submitWord());
+    expect(result.current.accepted).toBeNull();
+    expect(result.current.rejections).toBe(1);
+  });
+
   it("restores a saved game's words and score, so a found word stays found", () => {
     const { result } = renderHook(() =>
       useHexaSpell({ valid: WORDS, answers: WORDS }, { puzzle: PUZZLE, initial: { found: ["REST"], score: 1 } }),

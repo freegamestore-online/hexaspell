@@ -25,6 +25,10 @@ export interface HexaSpellState {
   score: number;
   input: string;
   message: string;
+  /** The last accepted word. `id` counts up on each accept, so an effect can tell repeats apart. */
+  accepted: { id: number; points: number; pangram: boolean } | null;
+  /** Counts up on each rejected word, so the view can react to a repeat rejection. */
+  rejections: number;
 }
 
 const REJECTIONS: Record<Exclude<WordCheck, "ok">, string> = {
@@ -37,6 +41,7 @@ const REJECTIONS: Record<Exclude<WordCheck, "ok">, string> = {
 type Action =
   | { type: "append"; letter: string }
   | { type: "delete" }
+  | { type: "clear" }
   | { type: "submit"; valid: ReadonlySet<string> }
   | { type: "shuffle"; rng: () => number };
 
@@ -49,23 +54,30 @@ function reduce(state: HexaSpellState, action: Action): HexaSpellState {
     }
     case "delete":
       return { ...state, input: state.input.slice(0, -1) };
+    case "clear":
+      return { ...state, input: "" };
     case "submit": {
       const word = state.input.toUpperCase();
-      const reject = (message: string): HexaSpellState => ({ ...state, input: "", message });
+      const reject = (message: string): HexaSpellState => ({
+        ...state,
+        input: "",
+        message,
+        rejections: state.rejections + 1,
+      });
       const check = checkWord(word, state.puzzle, action.valid);
       if (check !== "ok") return reject(REJECTIONS[check]);
       if (state.found.includes(word)) return reject("Already found");
 
       const points = scoreWord(word, state.puzzle);
-      const message = isPangram(word, state.puzzle)
-        ? `+${points} pts ✨ PANGRAM!`
-        : `+${points} pts 🎉`;
+      const pangram = isPangram(word, state.puzzle);
+      const message = pangram ? `+${points} pts ✨ PANGRAM!` : `+${points} pts 🎉`;
       return {
         ...state,
         found: [...state.found, word],
         score: state.score + points,
         input: "",
         message,
+        accepted: { id: (state.accepted?.id ?? 0) + 1, points, pangram },
       };
     }
     case "shuffle":
@@ -94,13 +106,16 @@ export function useHexaSpell(lists: WordLists, options: HexaSpellOptions = {}) {
       score: options.initial?.score ?? 0,
       input: "",
       message: "",
+      accepted: null,
+      rejections: 0,
     }),
   );
 
   const appendLetter = useCallback((letter: string) => dispatch({ type: "append", letter }), []);
   const deleteLetter = useCallback(() => dispatch({ type: "delete" }), []);
+  const clearInput = useCallback(() => dispatch({ type: "clear" }), []);
   const submitWord = useCallback(() => dispatch({ type: "submit", valid: lists.valid }), [lists.valid]);
   const shuffleBoard = useCallback(() => dispatch({ type: "shuffle", rng: Math.random }), []);
 
-  return { ...state, appendLetter, deleteLetter, submitWord, shuffleBoard };
+  return { ...state, appendLetter, deleteLetter, clearInput, submitWord, shuffleBoard };
 }
