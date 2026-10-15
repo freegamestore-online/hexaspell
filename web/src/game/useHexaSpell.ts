@@ -73,21 +73,25 @@ function reduce(state: HexaSpellState, action: Action): HexaSpellState {
   }
 }
 
+export interface HexaSpellOptions {
+  /** Play this board instead of a generated one. */
+  puzzle?: PuzzleConfig;
+  /** Restore a saved game's words and score. Read once, when the game starts. */
+  initial?: { found: string[]; score: number };
+}
+
 /**
  * The HexaSpell game state. Words are checked against `lists.valid`, and generated puzzles
- * are built from `lists.answers`. Pass `puzzle` to play a fixed board instead.
+ * are built from `lists.answers`.
  */
-export function useHexaSpell(
-  lists: WordLists,
-  options: { puzzle?: PuzzleConfig } = {},
-) {
+export function useHexaSpell(lists: WordLists, options: HexaSpellOptions = {}) {
   const [state, dispatch] = useReducer(
     reduce,
     lists,
     (l): HexaSpellState => ({
       puzzle: options.puzzle ?? generatePuzzle(undefined, l.answers),
-      found: [],
-      score: 0,
+      found: options.initial?.found ?? [],
+      score: options.initial?.score ?? 0,
       input: "",
       message: "",
     }),

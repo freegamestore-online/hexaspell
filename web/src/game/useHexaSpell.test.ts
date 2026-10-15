@@ -82,6 +82,17 @@ describe("useHexaSpell", () => {
     expect(result.current.score).toBe(0);
   });
 
+  it("restores a saved game's words and score, so a found word stays found", () => {
+    const { result } = renderHook(() =>
+      useHexaSpell({ valid: WORDS, answers: WORDS }, { puzzle: PUZZLE, initial: { found: ["REST"], score: 1 } }),
+    );
+    expect(result.current.score).toBe(1);
+    expect(result.current.found).toEqual(["REST"]);
+    type(result, "rest");
+    act(() => result.current.submitWord());
+    expect(result.current.message).toBe("Already found");
+  });
+
   it("shuffleBoard keeps the same puzzle letters and changes the outer order", () => {
     const { result } = setup();
     const before = result.current.puzzle;
