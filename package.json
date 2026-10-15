@@ -9,6 +9,7 @@
     "build": "pnpm --filter @hexaspell/web build",
     "preview": "pnpm --filter @hexaspell/web preview",
     "typecheck": "pnpm --filter @hexaspell/web exec tsc -b",
-    "test": "pnpm --filter @hexaspell/web test"
+    "test": "pnpm --filter @hexaspell/web test",
+    "lint": "pnpm --filter @hexaspell/web lint"
   }
 }
