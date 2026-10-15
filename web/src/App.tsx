@@ -1,20 +1,11 @@
 import { GameShell, GameTopbar, GameAuth } from "@freegamestore/games";
+import { GameView } from "./game/GameView";
 
 export default function App() {
   return (
-    <GameShell topbar={<GameTopbar title="Hexaspell" score={0} />}>
+    <GameShell topbar={<GameTopbar title="Hexaspell" />}>
       <GameAuth />
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <h1
-          className="text-3xl font-bold"
-          style={{ fontFamily: "Fraunces, serif" }}
-        >
-          Hexaspell
-        </h1>
-        <p style={{ color: "var(--muted)" }}>
-          Your game will appear here once it&rsquo;s built.
-        </p>
-      </div>
+      <GameView />
     </GameShell>
   );
 }
