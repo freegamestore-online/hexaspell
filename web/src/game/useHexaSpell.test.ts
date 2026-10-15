@@ -8,7 +8,7 @@ const PUZZLE: PuzzleConfig = { centre: "R", outer: ["A", "E", "I", "N", "S", "T"
 const WORDS: ReadonlySet<string> = new Set(["rest", "stare", "nastier", "restrain", "tins"]);
 
 function setup() {
-  return renderHook(() => useHexaSpell(WORDS, { puzzle: PUZZLE }));
+  return renderHook(() => useHexaSpell({ valid: WORDS, answers: WORDS }, { puzzle: PUZZLE }));
 }
 
 function type(result: ReturnType<typeof setup>["result"], word: string) {

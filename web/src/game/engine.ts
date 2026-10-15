@@ -1,4 +1,4 @@
-/** Pure HexaSpell rules: puzzle generation, word validation, scoring and shuffling. */
+/** Pure HexaSpell rules: word validation, puzzle generation, scoring and shuffling. */
 
 /** The six outer letters, in board order. */
 export type Outer = [string, string, string, string, string, string];
@@ -9,10 +9,14 @@ export interface PuzzleConfig {
   outer: Outer;
 }
 
+/** Why a word was rejected, or "ok". */
+export type WordCheck = "ok" | "too-short" | "missing-centre" | "bad-letters" | "not-in-list";
+
 export const MIN_WORD_LENGTH = 4;
 export const PANGRAM_BONUS = 7;
-/** With a word list, generatePuzzle keeps trying until a puzzle has at least this many answers. */
-export const MIN_ANSWERS = 15;
+/** A generated puzzle has between these many answers in the common word list. */
+export const MIN_ANSWERS = 20;
+export const MAX_ANSWERS = 60;
 const PUZZLE_ATTEMPTS = 200;
 const VOWELS = "AEIOU";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -71,14 +75,28 @@ export function letterSet(config: PuzzleConfig): Set<string> {
   return new Set([config.centre, ...config.outer]);
 }
 
-function fitsPuzzle(word: string, letters: ReadonlySet<string>, centre: string): boolean {
+/**
+ * Checks a word against a puzzle, in order: length, centre letter, puzzle letters, then the
+ * word list. `valid` is the lowercase list of accepted words; leave it out to check only the
+ * puzzle rules. Case does not matter.
+ */
+export function checkWord(
+  word: string,
+  config: PuzzleConfig,
+  valid?: ReadonlySet<string>,
+): WordCheck {
   const w = normalise(word);
-  return w.length >= MIN_WORD_LENGTH && w.includes(centre) && [...w].every((l) => letters.has(l));
+  if (w.length < MIN_WORD_LENGTH) return "too-short";
+  if (!w.includes(config.centre)) return "missing-centre";
+  const letters = letterSet(config);
+  if (![...w].every((l) => letters.has(l))) return "bad-letters";
+  if (valid && !valid.has(w.toLowerCase())) return "not-in-list";
+  return "ok";
 }
 
 /** At least four letters, uses the centre letter, and uses only the puzzle's letters. */
 export function isValidWord(word: string, config: PuzzleConfig): boolean {
-  return fitsPuzzle(word, letterSet(config), config.centre);
+  return checkWord(word, config) === "ok";
 }
 
 /** A valid word that uses all seven letters. */
@@ -94,11 +112,10 @@ export function scoreWord(word: string, config: PuzzleConfig): number {
   return base + (isPangram(word, config) ? PANGRAM_BONUS : 0);
 }
 
-/** How many words in the list are answers to this puzzle. */
+/** How many words in the list are answers to this puzzle (the puzzle rules only). */
 export function countAnswers(config: PuzzleConfig, words: ReadonlySet<string>): number {
-  const letters = letterSet(config);
   let count = 0;
-  for (const word of words) if (fitsPuzzle(word, letters, config.centre)) count++;
+  for (const word of words) if (isValidWord(word, config)) count++;
   return count;
 }
 
@@ -121,27 +138,27 @@ function isPangramCandidate(word: string): boolean {
 }
 
 /**
- * Builds a puzzle. Given a word list, the letters come from a real pangram in it, so the
- * puzzle always has at least one pangram, and the puzzle is kept only if it has at least
- * MIN_ANSWERS answers. Without a word list, the letters are random (with a vowel).
- * The same seed always gives the same puzzle.
+ * Builds a puzzle from the common word list (`answers`). The letters come from a pangram in
+ * that list, so the puzzle always has one, and the puzzle is kept only if its answer count is
+ * within MIN_ANSWERS..MAX_ANSWERS. The same seed always gives the same puzzle.
+ * Without a word list, the letters are random (with a vowel) and no range is checked.
  */
-export function generatePuzzle(seed?: string, words?: ReadonlySet<string>): PuzzleConfig {
+export function generatePuzzle(seed?: string, answers?: ReadonlySet<string>): PuzzleConfig {
   const rng = makeRng(seed);
-  if (!words) return puzzleFrom(randomLetters(rng), rng);
+  if (!answers) return puzzleFrom(randomLetters(rng), rng);
 
-  const sources = [...words].filter(isPangramCandidate);
+  const sources = [...answers].filter(isPangramCandidate);
   if (sources.length === 0) throw new Error("Word list has no pangram candidates");
 
-  let best: { config: PuzzleConfig; answers: number } | null = null;
   for (let attempt = 0; attempt < PUZZLE_ATTEMPTS; attempt++) {
     const letters = [...new Set(pick(sources, rng).toUpperCase())];
     const config = puzzleFrom(letters, rng);
-    const answers = countAnswers(config, words);
-    if (answers >= MIN_ANSWERS) return config;
-    if (!best || answers > best.answers) best = { config, answers };
+    const count = countAnswers(config, answers);
+    if (count >= MIN_ANSWERS && count <= MAX_ANSWERS) return config;
   }
-  return best!.config;
+  throw new Error(
+    `No puzzle with ${MIN_ANSWERS}–${MAX_ANSWERS} answers in ${PUZZLE_ATTEMPTS} attempts`,
+  );
 }
 
 /** Same centre and outer letters, in a new random order. */

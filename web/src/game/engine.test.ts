@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import { buildWordlist } from "../words/wordlist";
 import { buildBoard } from "./board";
 import {
+  MAX_ANSWERS,
   MIN_ANSWERS,
+  checkWord,
   countAnswers,
   generatePuzzle,
   isPangram,
@@ -35,6 +37,27 @@ describe("isValidWord", () => {
   it("rejects words that use letters outside the seven", () => {
     expect(isValidWord("bear", PUZZLE)).toBe(false);
     expect(isValidWord("ratio", PUZZLE)).toBe(false);
+  });
+});
+
+describe("checkWord", () => {
+  const valid = new Set(["rest", "restrain"]);
+
+  it("reports why a word is rejected, in order", () => {
+    expect(checkWord("res", PUZZLE)).toBe("too-short");
+    expect(checkWord("tins", PUZZLE)).toBe("missing-centre");
+    expect(checkWord("bear", PUZZLE)).toBe("bad-letters");
+    expect(checkWord("retina", PUZZLE, valid)).toBe("not-in-list");
+  });
+
+  it("accepts a word that is in the list, and the puzzle rules alone when no list is given", () => {
+    expect(checkWord("REST", PUZZLE, valid)).toBe("ok");
+    expect(checkWord("stare", PUZZLE)).toBe("ok");
+  });
+
+  it("accepts a valid bonus word that is outside the common answers", () => {
+    const bonusOnly = new Set(["restrain"]);
+    expect(checkWord("restrain", PUZZLE, bonusOnly)).toBe("ok");
   });
 });
 
@@ -114,19 +137,27 @@ describe("buildBoard", () => {
 });
 
 describe("generatePuzzle", () => {
-  const words = buildWordlist(readFileSync(join(process.cwd(), "public/wordlists/validation.txt"), "utf8"));
+  const answers = buildWordlist(readFileSync(join(process.cwd(), "public/wordlists/common.txt"), "utf8"));
 
   it("is deterministic for a given seed", () => {
-    expect(generatePuzzle("daily-1", words)).toEqual(generatePuzzle("daily-1", words));
+    expect(generatePuzzle("daily-1", answers)).toEqual(generatePuzzle("daily-1", answers));
   });
 
-  it.each(["alpha", "bravo", "cedar", "delta"])(
-    "builds a playable puzzle for seed %s, with a pangram and enough answers",
+  it("uses the 20–60 answer range from the issue", () => {
+    expect(MIN_ANSWERS).toBe(20);
+    expect(MAX_ANSWERS).toBe(60);
+  });
+
+  // Every generated puzzle must have a pangram and an answer count in range.
+  it.each(Array.from({ length: 30 }, (_, i) => `seed-${i}`))(
+    "builds a puzzle for %s with a pangram and 20–60 answers",
     (seed) => {
-      const config = generatePuzzle(seed, words);
+      const config = generatePuzzle(seed, answers);
       expect(new Set([config.centre, ...config.outer]).size).toBe(7);
-      expect([...words].some((w) => isPangram(w, config))).toBe(true);
-      expect(countAnswers(config, words)).toBeGreaterThanOrEqual(MIN_ANSWERS);
+      expect([...answers].some((w) => isPangram(w, config))).toBe(true);
+      const count = countAnswers(config, answers);
+      expect(count).toBeGreaterThanOrEqual(MIN_ANSWERS);
+      expect(count).toBeLessThanOrEqual(MAX_ANSWERS);
     },
   );
 

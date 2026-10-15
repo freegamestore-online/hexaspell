@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { loadWordlist, VALIDATION_URL } from "../words/wordlist";
+import { COMMON_URL, loadWordlist, VALIDATION_URL } from "../words/wordlist";
 import { buildBoard, BOARD_SIZE } from "./board";
 import { HoneycombBoard } from "./HoneycombBoard";
-import { useHexaSpell } from "./useHexaSpell";
+import { useHexaSpell, type WordLists } from "./useHexaSpell";
 
-/** Loads the word list, then mounts the game once it is ready. */
+/** Loads both word lists, then mounts the game once they are ready. */
 export function GameView() {
-  const [words, setWords] = useState<ReadonlySet<string> | null>(null);
+  const [lists, setLists] = useState<WordLists | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
-    loadWordlist(VALIDATION_URL)
-      .then((list) => live && setWords(list))
+    Promise.all([loadWordlist(VALIDATION_URL), loadWordlist(COMMON_URL)])
+      .then(([valid, answers]) => live && setLists({ valid, answers }))
       .catch(() => live && setError("Could not load the word list."));
     return () => {
       live = false;
@@ -20,12 +20,12 @@ export function GameView() {
   }, []);
 
   if (error) return <p style={{ color: "var(--error)" }}>{error}</p>;
-  if (!words) return <p style={{ color: "var(--muted)" }}>Loading…</p>;
-  return <Game words={words} />;
+  if (!lists) return <p style={{ color: "var(--muted)" }}>Loading…</p>;
+  return <Game lists={lists} />;
 }
 
-function Game({ words }: { words: ReadonlySet<string> }) {
-  const game = useHexaSpell(words);
+function Game({ lists }: { lists: WordLists }) {
+  const game = useHexaSpell(lists);
   const cells = useMemo(
     () => buildBoard(game.puzzle, BOARD_SIZE, BOARD_SIZE),
     [game.puzzle],

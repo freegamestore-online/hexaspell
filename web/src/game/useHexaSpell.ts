@@ -1,13 +1,23 @@
 import { useCallback, useReducer } from "react";
 import {
-  MIN_WORD_LENGTH,
+  checkWord,
   generatePuzzle,
   isPangram,
   letterSet,
   scoreWord,
   shuffle,
   type PuzzleConfig,
+  type WordCheck,
 } from "./engine";
+
+/**
+ * The lowercase word lists. `valid` is every accepted word (bonus words included); `answers`
+ * is the common subset that puzzles are built from.
+ */
+export interface WordLists {
+  valid: ReadonlySet<string>;
+  answers: ReadonlySet<string>;
+}
 
 export interface HexaSpellState {
   puzzle: PuzzleConfig;
@@ -17,10 +27,17 @@ export interface HexaSpellState {
   message: string;
 }
 
+const REJECTIONS: Record<Exclude<WordCheck, "ok">, string> = {
+  "too-short": "Too short",
+  "missing-centre": "Missing centre",
+  "bad-letters": "Letters not in puzzle",
+  "not-in-list": "Not in word list",
+};
+
 type Action =
   | { type: "append"; letter: string }
   | { type: "delete" }
-  | { type: "submit"; words: ReadonlySet<string> }
+  | { type: "submit"; valid: ReadonlySet<string> }
   | { type: "shuffle"; rng: () => number };
 
 function reduce(state: HexaSpellState, action: Action): HexaSpellState {
@@ -35,10 +52,9 @@ function reduce(state: HexaSpellState, action: Action): HexaSpellState {
     case "submit": {
       const word = state.input.toUpperCase();
       const reject = (message: string): HexaSpellState => ({ ...state, input: "", message });
-      if (word.length < MIN_WORD_LENGTH) return reject("Too short");
-      if (!word.includes(state.puzzle.centre)) return reject("Missing centre");
+      const check = checkWord(word, state.puzzle, action.valid);
+      if (check !== "ok") return reject(REJECTIONS[check]);
       if (state.found.includes(word)) return reject("Already found");
-      if (!action.words.has(word.toLowerCase())) return reject("Not in word list");
 
       const points = scoreWord(word, state.puzzle);
       const message = isPangram(word, state.puzzle)
@@ -58,18 +74,18 @@ function reduce(state: HexaSpellState, action: Action): HexaSpellState {
 }
 
 /**
- * The HexaSpell game state. `words` is the lowercase word list that answers are checked
- * against. Pass `puzzle` to play a fixed board instead of a generated one.
+ * The HexaSpell game state. Words are checked against `lists.valid`, and generated puzzles
+ * are built from `lists.answers`. Pass `puzzle` to play a fixed board instead.
  */
 export function useHexaSpell(
-  words: ReadonlySet<string>,
+  lists: WordLists,
   options: { puzzle?: PuzzleConfig } = {},
 ) {
   const [state, dispatch] = useReducer(
     reduce,
-    words,
-    (w): HexaSpellState => ({
-      puzzle: options.puzzle ?? generatePuzzle(undefined, w),
+    lists,
+    (l): HexaSpellState => ({
+      puzzle: options.puzzle ?? generatePuzzle(undefined, l.answers),
       found: [],
       score: 0,
       input: "",
@@ -79,7 +95,7 @@ export function useHexaSpell(
 
   const appendLetter = useCallback((letter: string) => dispatch({ type: "append", letter }), []);
   const deleteLetter = useCallback(() => dispatch({ type: "delete" }), []);
-  const submitWord = useCallback(() => dispatch({ type: "submit", words }), [words]);
+  const submitWord = useCallback(() => dispatch({ type: "submit", valid: lists.valid }), [lists.valid]);
   const shuffleBoard = useCallback(() => dispatch({ type: "shuffle", rng: Math.random }), []);
 
   return { ...state, appendLetter, deleteLetter, submitWord, shuffleBoard };
